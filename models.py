@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing import Literal
 
-Lang = Literal['python', 'javascript', 'java', 'cpp', 'ruby']
+Lang = Literal['python', 'javascript', 'java', 'cpp']
 
 class CodeRequest(BaseModel):
     language: Lang
