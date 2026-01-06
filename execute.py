@@ -23,14 +23,28 @@ def _get_exec_command(language: str, code: str) -> list[str]:
     if language in EXEC_CMD:
         if language == "java":
             # For Java, we need to write code to a file, compile and run
-            return ["sh", "-c", f'echo "{code}" > Main.java && javac Main.java && java Main']
+            return ["sh", "-c", f'echo "{code}" > Main.java && javac Main.java && time -f %E java Main']
         elif language == "cpp":
             # For C++, we need to write code to a file, compile and run
-            return ["sh", "-c", f'echo "{code}" > main.cpp && g++ main.cpp -o main && ./main']
+            return ["sh", "-c", f'echo "{code}" > main.cpp && g++ main.cpp -o main && time -f %E ./main']
         else:
-            return EXEC_CMD[language] + [code]
+            return ["time", "-f", "%E"] + EXEC_CMD[language] + [code]
     else:
         raise ValueError("Unsupported language")
+
+def _prep_container(image: str) -> docker.models.containers.Container:
+    container = client.containers.run(
+        image=image,
+        command=["sleep", "infinity"],
+        detach=True,
+        auto_remove=True
+    )
+
+    # install time module
+    container.exec_run(["apt", "update"])
+    container.exec_run(["apt", "install", "time"])
+
+    return container
 
 """
 Sample Json for python:
@@ -60,7 +74,7 @@ Sample Json for JavaScript:
 Sample Json for C++:
 {
     "language": "cpp",
-    "code": "#include <iostream>\n\nint main() {\n    std::cout << \\\"Hello, World!\\\" << std::endl;\n    return 0;\n}"
+    "code": "#include <iostream>\n\nint main() {\n    std::cout << \\\"Hello, World!\\\" << std::endl;\n    return 0;\n}",
     "input_data": null
 }
 """
@@ -71,16 +85,16 @@ def execute_code(request: CodeRequest) -> CodeResult:
         return CodeResult(stdout="", stderr="Unsupported language", exit_code=1)
     
     try:
-        container = client.containers.run(
-            image=image,
-            command=["sleep", "infinity"],
-            detach=True,
-            auto_remove=True
-        )
+        container = _prep_container(image)
         exec_command = _get_exec_command(request.language, request.code)
 
         # execute code and format output
         exec_log = container.exec_run(exec_command, demux=True)
+        print(exec_log)
+        """
+        # TODO: fix output parsing and extract time properly
+        ExecResult(exit_code=0, output=(b'Hello, World!\nI am learning JavaScript.\n', b'0m 0.42s\n'))
+        """
         exit_code = exec_log.exit_code
         stdout, stderr = exec_log.output
         stdout = stdout.decode() if stdout else None
