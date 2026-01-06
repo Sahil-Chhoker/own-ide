@@ -1,14 +1,25 @@
 from pydantic import BaseModel
 from typing import Literal
 
-Lang = Literal['python', 'javascript', 'java', 'cpp']
+class User(BaseModel):
+    username: str
+    email: str
+    full_name: str | None = None
 
 class CodeRequest(BaseModel):
-    language: Lang
+    language: Literal["python", "javascript", "java", "cpp"]
     code: str
     input_data: str | None = None
 
 class CodeResult(BaseModel):
-    stdout: str
-    stderr: str
-    exit_code: int
+    stdout: str | None = None
+    stderr: str | None = None
+    error_type: Literal["runtime", "compile", "system"] | None = None
+    exit_code: int | None = None
+    execution_time: float | None = None
+
+class CodeStatus(BaseModel):
+    task_id: str
+    user_id: str
+    status: Literal["pending", "running", "completed", "failed"]
+    result: CodeResult | None = None
