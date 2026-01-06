@@ -1,9 +1,9 @@
-from models import CodeRequest, CodeResult
+import time
 import docker
+from models import CodeRequest, CodeResult
 
 client = docker.from_env()
 
-# language to Docker image mapping
 LANG_IMAGE = {
     "python": "python:3.12-alpine",
     "javascript": "node:20-alpine",
@@ -14,37 +14,17 @@ LANG_IMAGE = {
 EXEC_CMD = {
     "python": ["python3", "-c"],
     "javascript": ["node", "-e"],
-    "java": [],  # Java needs compilation; handled differently
-    "cpp": [],   # C++ needs compilation; handled differently
 }
 
-
 def _get_exec_command(language: str, code: str) -> list[str]:
-    if language in EXEC_CMD:
-        if language == "java":
-            # For Java, we need to write code to a file, compile and run
-            return ["sh", "-c", f'echo "{code}" > Main.java && javac Main.java && time -f %E java Main']
-        elif language == "cpp":
-            # For C++, we need to write code to a file, compile and run
-            return ["sh", "-c", f'echo "{code}" > main.cpp && g++ main.cpp -o main && time -f %E ./main']
-        else:
-            return ["time", "-f", "%E"] + EXEC_CMD[language] + [code]
+    if language == "java":
+        return ["sh", "-c", f'echo "{code}" > Main.java && javac Main.java && java Main']
+    elif language == "cpp":
+        return ["sh", "-c", f'echo "{code}" > main.cpp && g++ main.cpp -o main && ./main']
+    elif language in EXEC_CMD:
+        return EXEC_CMD[language] + [code]
     else:
         raise ValueError("Unsupported language")
-
-def _prep_container(image: str) -> docker.models.containers.Container:
-    container = client.containers.run(
-        image=image,
-        command=["sleep", "infinity"],
-        detach=True,
-        auto_remove=True
-    )
-
-    # install time module
-    container.exec_run(["apt", "update"])
-    container.exec_run(["apt", "install", "time"])
-
-    return container
 
 """
 Sample Json for python:
@@ -84,25 +64,51 @@ def execute_code(request: CodeRequest) -> CodeResult:
     if not image:
         return CodeResult(stdout="", stderr="Unsupported language", exit_code=1)
     
+    container = None
     try:
-        container = _prep_container(image)
+        container = client.containers.run(
+            image=image,
+            command=["sleep", "infinity"],
+            detach=True,
+            auto_remove=True
+        )
+        
         exec_command = _get_exec_command(request.language, request.code)
 
-        # execute code and format output
+        start_time = time.perf_counter()
         exec_log = container.exec_run(exec_command, demux=True)
-        print(exec_log)
-        """
-        # TODO: fix output parsing and extract time properly
-        ExecResult(exit_code=0, output=(b'Hello, World!\nI am learning JavaScript.\n', b'0m 0.42s\n'))
-        """
+        end_time = time.perf_counter()
+
+        # Calculate duration and remove 50ms buffer
+        total_time = end_time - start_time
+        execution_time = max(0.0, total_time - 0.05)
+
         exit_code = exec_log.exit_code
-        stdout, stderr = exec_log.output
-        stdout = stdout.decode() if stdout else None
-        stderr = stderr.decode() if stderr else None
+        stdout_bytes, stderr_bytes = exec_log.output
+        
+        stdout = stdout_bytes.decode('utf-8', errors='replace') if stdout_bytes else None
+        stderr = stderr_bytes.decode('utf-8', errors='replace') if stderr_bytes else None
 
-        container.stop()
+        error_type = None
+        if exit_code != 0:
+            error_type = "compile" if not stdout and stderr else "runtime"
 
-        return CodeResult(stdout=stdout, stderr=stderr, exit_code=exit_code)
+        return CodeResult(
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=exit_code,
+            execution_time=round(execution_time, 4),
+            error_type=error_type
+        )
 
     except Exception as e:
-        return CodeResult(stdout=None, stderr=str(e), exit_code=1)
+        return CodeResult(
+            stdout=None, 
+            stderr=str(e), 
+            exit_code=1, 
+            error_type="system"
+        )
+    
+    finally:
+        if container:
+            container.stop()
