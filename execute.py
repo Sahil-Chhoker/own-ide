@@ -83,12 +83,12 @@ def execute_code(request: CodeRequest) -> CodeResult:
         exec_log = container.exec_run(exec_command, demux=True)
         exit_code = exec_log.exit_code
         stdout, stderr = exec_log.output
-        stdout = stdout.decode() if stdout else ""
-        stderr = stderr.decode() if stderr else ""
+        stdout = stdout.decode() if stdout else None
+        stderr = stderr.decode() if stderr else None
 
         container.stop()
 
         return CodeResult(stdout=stdout, stderr=stderr, exit_code=exit_code)
 
     except Exception as e:
-        return CodeResult(stdout="", stderr=str(e), exit_code=1)
+        return CodeResult(stdout=None, stderr=str(e), exit_code=1)
