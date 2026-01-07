@@ -4,6 +4,7 @@ from models import CodeRequest, CodeResult
 
 client = docker.from_env()
 
+# language to Docker image mapping
 LANG_IMAGE = {
     "python": "python:3.12-alpine",
     "javascript": "node:20-alpine",
@@ -62,7 +63,7 @@ Sample Json for C++:
 def execute_code(request: CodeRequest) -> CodeResult:
     image = LANG_IMAGE.get(request.language)
     if not image:
-        return CodeResult(stdout="", stderr="Unsupported language", exit_code=1)
+        return CodeResult(stdout=None, stderr="Unsupported language", exit_code=1)
     
     container = None
     try:
