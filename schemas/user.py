@@ -1,9 +1,11 @@
 from pydantic import BaseModel, EmailStr, Field
 
+
 class UserBase(BaseModel):
     username: str
     email: EmailStr
     full_name: str | None = None
+
 
 class UserIn(UserBase):
     password: str = Field(..., min_length=8)

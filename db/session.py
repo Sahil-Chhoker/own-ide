@@ -1,4 +1,5 @@
 from pymongo import AsyncMongoClient
+from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.server_api import ServerApi
 from core.config import settings
 
@@ -27,3 +28,8 @@ async def close_client():
     if _client:
         await _client.close()
         _client = None
+
+
+async def get_db() -> AsyncDatabase:
+    client = await get_client()
+    return client.get_database("ideall")

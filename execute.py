@@ -17,15 +17,25 @@ EXEC_CMD = {
     "javascript": ["node", "-e"],
 }
 
+
 def _get_exec_command(language: str, code: str) -> list[str]:
     if language == "java":
-        return ["sh", "-c", f'echo "{code}" > Main.java && javac Main.java && java Main']
+        return [
+            "sh",
+            "-c",
+            f'echo "{code}" > Main.java && javac Main.java && java Main',
+        ]
     elif language == "cpp":
-        return ["sh", "-c", f'echo "{code}" > main.cpp && g++ main.cpp -o main && ./main']
+        return [
+            "sh",
+            "-c",
+            f'echo "{code}" > main.cpp && g++ main.cpp -o main && ./main',
+        ]
     elif language in EXEC_CMD:
         return EXEC_CMD[language] + [code]
     else:
         raise ValueError("Unsupported language")
+
 
 """
 Sample Json for python:
@@ -60,20 +70,18 @@ Sample Json for C++:
 }
 """
 
+
 def execute_code(request: CodeRequest) -> CodeResult:
     image = LANG_IMAGE.get(request.language)
     if not image:
         return CodeResult(stdout=None, stderr="Unsupported language", exit_code=1)
-    
+
     container = None
     try:
         container = client.containers.run(
-            image=image,
-            command=["sleep", "infinity"],
-            detach=True,
-            auto_remove=True
+            image=image, command=["sleep", "infinity"], detach=True, auto_remove=True
         )
-        
+
         exec_command = _get_exec_command(request.language, request.code)
 
         start_time = time.perf_counter()
@@ -86,9 +94,13 @@ def execute_code(request: CodeRequest) -> CodeResult:
 
         exit_code = exec_log.exit_code
         stdout_bytes, stderr_bytes = exec_log.output
-        
-        stdout = stdout_bytes.decode('utf-8', errors='replace') if stdout_bytes else None
-        stderr = stderr_bytes.decode('utf-8', errors='replace') if stderr_bytes else None
+
+        stdout = (
+            stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else None
+        )
+        stderr = (
+            stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else None
+        )
 
         error_type = None
         if exit_code != 0:
@@ -99,17 +111,12 @@ def execute_code(request: CodeRequest) -> CodeResult:
             stderr=stderr,
             exit_code=exit_code,
             execution_time=round(execution_time, 4),
-            error_type=error_type
+            error_type=error_type,
         )
 
     except Exception as e:
-        return CodeResult(
-            stdout=None, 
-            stderr=str(e), 
-            exit_code=1, 
-            error_type="system"
-        )
-    
+        return CodeResult(stdout=None, stderr=str(e), exit_code=1, error_type="system")
+
     finally:
         if container:
             container.stop()

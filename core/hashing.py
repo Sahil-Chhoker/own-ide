@@ -2,6 +2,7 @@ from pwdlib import PasswordHash
 
 password_hash = PasswordHash.recommended()
 
+
 class Hasher:
     @staticmethod
     def verify_password(plain_password, hashed_password):

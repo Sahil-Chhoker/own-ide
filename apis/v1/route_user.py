@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from schemas.user import UserIn, UserOut
-from apis.v1.route_login import get_current_user
-from db.user import create_new_user, delete_user
+from db.user import create_new_user, delete_user, get_current_user
 from pymongo.asynchronous.database import AsyncDatabase
-from db.base import get_db
+from db.session import get_db
 
 router = APIRouter()
+
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def create_user(
@@ -42,4 +42,6 @@ async def delete_current_user(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    return {"message": f"User deleted successfully with username {current_user.username}"}
+    return {
+        "message": f"User deleted successfully with username {current_user.username}"
+    }
