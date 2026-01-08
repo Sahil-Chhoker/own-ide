@@ -1,23 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from typing import Literal
 
-class UserBase(BaseModel):
-    username: str
-    email: EmailStr
-    full_name: str | None = None
-
-class UserIn(UserBase):
-    password: str
-
-
-class UserOut(UserBase):
-    pass
-
-
-class UserInDB(UserBase):
-    hashed_password: str
-
-
 class CodeRequest(BaseModel):
     language: Literal["python", "javascript", "java", "cpp"]
     code: str

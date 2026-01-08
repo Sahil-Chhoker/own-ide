@@ -1,6 +1,6 @@
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from uuid import uuid4
-from models import CodeRequest, CodeStatus
+from schemas.code import CodeRequest, CodeStatus
 
 from execute import execute_code
 
