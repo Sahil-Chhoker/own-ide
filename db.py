@@ -1,7 +1,7 @@
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
-from config import settings
+from core.config import settings
 
 
 uri = settings.DATABASE_URI
