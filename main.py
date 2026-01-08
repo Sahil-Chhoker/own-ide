@@ -9,13 +9,12 @@ tasks_db = {}
 
 def run_background_task(task_id: str, code_request: CodeRequest):
     tasks_db[task_id]["status"] = "running"
-    try:
-        result = execute_code(code_request)
+    result = execute_code(code_request)
+    if result.exit_code == 0:
         tasks_db[task_id]['status'] = 'completed'
-        tasks_db[task_id]['result'] = result
-    except Exception as e:
+    else:
         tasks_db[task_id]['status'] = 'failed'
-        tasks_db[task_id]['result'] = str(e)
+    tasks_db[task_id]['result'] = result
 
 @app.get("/")
 async def read_root():
