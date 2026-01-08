@@ -11,7 +11,7 @@ async def create_new_user(user: UserIn, db: AsyncDatabase) -> UserOut:
     return UserOut(**new_user.model_dump())
 
 
-async def delete_user(username: int, db: AsyncDatabase) -> dict:
+async def delete_user(username: str, db: AsyncDatabase) -> dict:
     result = await db.users.delete_one({"username": username})
     if result.deleted_count == 0:
         return {"error": "User not found"}
