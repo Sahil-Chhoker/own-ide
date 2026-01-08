@@ -23,9 +23,8 @@ async def get_user_profile(
     return current_user
 
 
-@router.delete("/{username}", status_code=status.HTTP_200_OK)
+@router.delete("/", status_code=status.HTTP_200_OK)
 async def delete_current_user(
-    username: str,
     db: AsyncDatabase = Depends(get_db),
     current_user: UserIn = Depends(get_current_user),
 ):
@@ -35,13 +34,7 @@ async def delete_current_user(
             detail="Could not validate credentials",
         )
 
-    if username != current_user.username:
-        raise HTTPException(
-            detail="Only the owner can delete the user.",
-            status_code=status.HTTP_403_FORBIDDEN,
-        )
-
-    message = await delete_user(username=username, db=db)
+    message = await delete_user(username=current_user.username, db=db)
 
     if message.get("error"):
         raise HTTPException(
@@ -49,4 +42,4 @@ async def delete_current_user(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    return {"message": f"User deleted successfully with id {username}"}
+    return {"message": f"User deleted successfully with username {current_user.username}"}
