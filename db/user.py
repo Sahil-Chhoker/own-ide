@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 import jwt
@@ -11,6 +12,10 @@ from fastapi import HTTPException, status
 
 
 async def create_new_user(user: UserIn, db: AsyncDatabase) -> UserOut:
+    """
+    Create a new user in the database.
+    Raises HTTPException if a user with the same username already exists.
+    """
     query = await db.users.find_one({"username": user.username})
     if query:
         raise HTTPException(
@@ -26,6 +31,9 @@ async def create_new_user(user: UserIn, db: AsyncDatabase) -> UserOut:
 
 
 async def delete_user(username: str, db: AsyncDatabase) -> dict:
+    """
+    Delete a user by username.
+    """
     result = await db.users.delete_one({"username": username})
     if result.deleted_count == 0:
         return {"error": "User not found"}
@@ -33,6 +41,9 @@ async def delete_user(username: str, db: AsyncDatabase) -> dict:
 
 
 async def get_user(username: str):
+    """
+    Retrieve a user by username.
+    """
     db = await get_db()
     query = await db.users.find_one({"username": username})
     if query:
@@ -41,6 +52,9 @@ async def get_user(username: str):
 
 
 async def authenticate_user(username: str, password: str):
+    """
+    Authenticate user by username and password.
+    """
     user = await get_user(username)
     if not user:
         return False
@@ -55,6 +69,10 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/user/login")
 async def get_current_user(
     token: str = Depends(oauth2_scheme), db: AsyncDatabase = Depends(get_db)
 ) -> UserInDB:
+    """
+    Retrieve the current user based on the provided JWT token.
+    Raises HTTPException if the token is invalid or the user does not exist.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -76,3 +94,24 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
     return user  # type: ignore
+
+
+optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
+
+
+async def get_optional_current_user(
+    token: Optional[str] = Depends(optional_oauth2_scheme),
+    db: AsyncDatabase = Depends(get_db),
+) -> Optional[UserInDB]:
+    """
+    Retrieve the current user if a valid token is provided; otherwise, return None.
+    Lienent version of get_current_user specifically for optional authentication.
+    """
+    if not token:
+        return None
+
+    try:
+        return await get_current_user(token=token, db=db)
+    except HTTPException:
+        # If token is invalid/expired, treat them as a guest instead of blocking
+        return None

@@ -1,5 +1,8 @@
 import time
 import docker
+from fastapi import Depends, HTTPException, Request, status
+from db.redis import get_redis_client
+from db.user import get_optional_current_user
 from schemas.code import CodeRequest, CodeResult
 from core.config import settings
 
@@ -108,3 +111,30 @@ def execute_code(request: CodeRequest) -> CodeResult:
     finally:
         if container:
             container.stop()
+
+
+async def check_quota(
+    request: Request,
+    user=Depends(get_optional_current_user),
+    redis=Depends(get_redis_client),
+):
+    """
+    Check and enforce guest user quota based on IP address.
+    """
+    # Authorized users have no quota restrictions
+    if user:
+        return
+
+    client_ip = request.client.host
+    redis_key = f"quota:{client_ip}"
+
+    count = await redis.get(redis_key)
+    if count and int(count) >= settings.GUEST_QUOTA:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Guest quota exceeded. Please log in for unlimited access.",
+        )
+    async with redis.pipeline(transaction=True) as pipe:
+        await pipe.incr(redis_key)
+        await pipe.expire(redis_key, settings.IP_EXPIRY_SECONDS, nx=True)
+        await pipe.execute()

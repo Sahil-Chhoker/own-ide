@@ -1,8 +1,8 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from uuid import uuid4
 from schemas.code import CodeRequest, CodeStatus
 
-from db.sandbox import execute_code
+from db.sandbox import check_quota, execute_code
 
 router = APIRouter()
 tasks_db = {}
@@ -20,11 +20,13 @@ def run_background_task(task_id: str, code_request: CodeRequest):
 
 @router.post("/", response_model=CodeStatus)
 async def submit_code(
-    request: CodeRequest, background_tasks: BackgroundTasks
+    code_request: CodeRequest,
+    background_tasks: BackgroundTasks,
+    quota=Depends(check_quota),
 ) -> CodeStatus:
     task_id = str(uuid4())
     tasks_db[task_id] = {"status": "pending", "result": None}
-    background_tasks.add_task(run_background_task, task_id, request)
+    background_tasks.add_task(run_background_task, task_id, code_request)
     return CodeStatus(
         task_id=task_id, user_id="request.id", status="pending", result=None
     )

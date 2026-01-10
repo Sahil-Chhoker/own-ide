@@ -18,6 +18,7 @@ async def get_client() -> AsyncMongoClient:
 
         # Optional: verify once
         await _client.admin.command({"ping": 1})
+        print("Connected to MongoDB!")
 
     return _client
 
