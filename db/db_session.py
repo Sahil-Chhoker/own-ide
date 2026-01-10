@@ -32,4 +32,8 @@ async def close_client():
 
 async def get_db() -> AsyncDatabase:
     client = await get_client()
-    return client.get_database("ideall")
+    db = client.get_database("ideall")
+
+    # Create TTL index on 'expireAt' field if not exists
+    await db.submissions.create_index("expireAt", expireAfterSeconds=0)
+    return db

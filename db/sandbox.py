@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import time
 from uuid import uuid4
 import docker
@@ -119,6 +119,14 @@ def execute_code(request: CodeRequest) -> CodeResult:
 async def create_initial_submission(
     db: AsyncDatabase, task_id: str, user_id: str, code_request: CodeRequest
 ):
+    now = datetime.now(timezone.utc)
+    is_guest = user_id.startswith("guest_") or user_id == "guest"
+
+    if is_guest:
+        expiration_time = now + timedelta(seconds=600)
+    else:
+        expiration_time = now + settings.SUBMISSION_TTL
+
     submission_data = {
         "task_id": task_id,
         "user_id": user_id,
@@ -126,7 +134,8 @@ async def create_initial_submission(
         "code": code_request.code,
         "status": "pending",
         "result": None,
-        "created_at": datetime.now(timezone.utc),
+        "created_at": now,
+        "expireAt": expiration_time,
     }
     await db.submissions.insert_one(submission_data)
 

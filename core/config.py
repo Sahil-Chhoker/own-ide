@@ -10,6 +10,7 @@ class Settings:
 
     # MonogoDB settings
     DATABASE_URI: str = os.getenv("DATABASE_URI")
+    SUBMISSION_TTL_SECONDS: int = int(os.getenv("SUBMISSION_TTL_SECONDS", "3600"))
 
     # JWT settings
     SECRET_KEY: str = os.getenv("SECRET_KEY")

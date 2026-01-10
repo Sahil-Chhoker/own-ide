@@ -90,6 +90,7 @@ Create a `.env` file in the project root:
 DATABASE_URI="your_mongoDB_uri"
 DATABASE_USER="your_mongoDB_username"
 DATABASE_PASSWORD="your_mongoDB_password"
+SUMBISSION_TTL_SECONDS=86400
 
 SECRET_KEY="your_custom_secret_key"
 ALGORITHM=HS256
