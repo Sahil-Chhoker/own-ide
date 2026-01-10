@@ -1,21 +1,9 @@
 import time
 import docker
-from models import CodeRequest, CodeResult
+from schemas.code import CodeRequest, CodeResult
+from core.config import settings
 
 client = docker.from_env()
-
-# language to Docker image mapping
-LANG_IMAGE = {
-    "python": "python:3.12-alpine",
-    "javascript": "node:20-alpine",
-    "java": "eclipse-temurin:21-jdk-alpine",
-    "cpp": "gcc:13.4.0-bookworm",
-}
-
-EXEC_CMD = {
-    "python": ["python3", "-c"],
-    "javascript": ["node", "-e"],
-}
 
 
 def _get_exec_command(language: str, code: str) -> list[str]:
@@ -31,8 +19,8 @@ def _get_exec_command(language: str, code: str) -> list[str]:
             "-c",
             f'echo "{code}" > main.cpp && g++ main.cpp -o main && ./main',
         ]
-    elif language in EXEC_CMD:
-        return EXEC_CMD[language] + [code]
+    elif language in settings.EXEC_CMD:
+        return settings.EXEC_CMD[language] + [code]
     else:
         raise ValueError("Unsupported language")
 
@@ -72,7 +60,7 @@ Sample Json for C++:
 
 
 def execute_code(request: CodeRequest) -> CodeResult:
-    image = LANG_IMAGE.get(request.language)
+    image = settings.LANG_IMAGE.get(request.language)
     if not image:
         return CodeResult(stdout=None, stderr="Unsupported language", exit_code=1)
 

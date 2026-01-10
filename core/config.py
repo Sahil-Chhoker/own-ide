@@ -15,5 +15,18 @@ class Settings:
         os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30")
     )
 
+    # language to Docker image mapping
+    LANG_IMAGE = {
+        "python": "python:3.12-alpine",
+        "javascript": "node:20-alpine",
+        "java": "eclipse-temurin:21-jdk-alpine",
+        "cpp": "gcc:13.4.0-bookworm",
+    }
+
+    EXEC_CMD = {
+        "python": ["python3", "-c"],
+        "javascript": ["node", "-e"],
+    }
+
 
 settings = Settings()

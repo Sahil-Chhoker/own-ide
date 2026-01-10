@@ -18,7 +18,6 @@ async def get_client() -> AsyncMongoClient:
 
         # Optional: verify once
         await _client.admin.command({"ping": 1})
-        print("Mongo connected")
 
     return _client
 

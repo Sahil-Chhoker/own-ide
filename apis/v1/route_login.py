@@ -14,7 +14,7 @@ from pymongo.asynchronous.database import AsyncDatabase
 router = APIRouter()
 
 
-@router.post("/user/login", response_model=Token)
+@router.post("/login", response_model=Token)
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestFormStrict = Depends(),
     db: AsyncDatabase = Depends(get_db),
