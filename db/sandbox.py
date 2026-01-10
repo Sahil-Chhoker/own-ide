@@ -1,10 +1,13 @@
+from datetime import datetime, timezone
 import time
+from uuid import uuid4
 import docker
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, Response, status
 from db.redis_session import get_redis_client
 from db.user import get_optional_current_user
 from schemas.code import CodeRequest, CodeResult
 from core.config import settings
+from pymongo.asynchronous.database import AsyncDatabase
 
 client = docker.from_env()
 
@@ -113,8 +116,59 @@ def execute_code(request: CodeRequest) -> CodeResult:
             container.stop()
 
 
+async def create_initial_submission(
+    db: AsyncDatabase, task_id: str, user_id: str, code_request: CodeRequest
+):
+    submission_data = {
+        "task_id": task_id,
+        "user_id": user_id,
+        "language": code_request.language,
+        "code": code_request.code,
+        "status": "pending",
+        "result": None,
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.submissions.insert_one(submission_data)
+
+
+async def update_submission_result(
+    db: AsyncDatabase, task_id: str, status: str, result: CodeResult
+):
+    await db.submissions.update_one(
+        {"task_id": task_id},
+        {
+            "$set": {
+                "status": status,
+                "result": result.model_dump(),
+                "updated_at": datetime.now(timezone.utc),
+            }
+        },
+    )
+
+
+async def get_visitor_id(
+    request: Request, response: Response, user=Depends(get_optional_current_user)
+) -> str:
+    # if logged in, use user ID
+    if user:
+        return user.id
+
+    # if not logged in, check for an existing guest_id cookie
+    guest_id = request.cookies.get("guest_id")
+
+    # if no cookie, create a new one for this visitor
+    if not guest_id:
+        guest_id = f"guest_{uuid4()}"
+        # Set cookie to expire in 30 days
+        response.set_cookie(
+            key="guest_id", value=guest_id, max_age=2592000, httponly=True
+        )
+
+    return guest_id
+
+
 async def check_quota(
-    request: Request,
+    visitor_id: str = Depends(get_visitor_id),
     user=Depends(get_optional_current_user),
     redis=Depends(get_redis_client),
 ):
@@ -125,8 +179,7 @@ async def check_quota(
     if user:
         return
 
-    client_ip = request.client.host
-    redis_key = f"quota:{client_ip}"
+    redis_key = f"quota:{visitor_id}"
 
     count = await redis.get(redis_key)
     if count and int(count) >= settings.GUEST_QUOTA:

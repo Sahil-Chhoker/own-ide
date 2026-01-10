@@ -96,7 +96,9 @@ async def get_current_user(
     return user  # type: ignore
 
 
-optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
+optional_oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/api/user/login", auto_error=False
+)
 
 
 async def get_optional_current_user(
