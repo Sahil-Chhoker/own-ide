@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordBearer
 import jwt
 from core.config import settings
 from schemas.token import TokenData
-from db.session import get_db
+from db.db_session import get_db
 from schemas.user import UserIn, UserInDB, UserOut
 from core.hashing import Hasher
 from pymongo.asynchronous.database import AsyncDatabase

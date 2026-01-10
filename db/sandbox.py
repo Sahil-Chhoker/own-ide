@@ -1,7 +1,7 @@
 import time
 import docker
 from fastapi import Depends, HTTPException, Request, status
-from db.redis import get_redis_client
+from db.redis_session import get_redis_client
 from db.user import get_optional_current_user
 from schemas.code import CodeRequest, CodeResult
 from core.config import settings

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestFormStrict
 from db.user import authenticate_user
 from schemas.token import Token
-from db.session import get_db
+from db.db_session import get_db
 from pymongo.asynchronous.database import AsyncDatabase
 
 router = APIRouter()

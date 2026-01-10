@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from schemas.user import UserIn, UserOut
 from db.user import create_new_user, delete_user, get_current_user
 from pymongo.asynchronous.database import AsyncDatabase
-from db.session import get_db
+from db.db_session import get_db
 
 router = APIRouter()
 
