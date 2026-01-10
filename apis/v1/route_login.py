@@ -1,14 +1,11 @@
 from datetime import timedelta
 from core.config import settings
-from core.hashing import Hasher
 from core.security import create_access_token
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestFormStrict
-import jwt
+from fastapi.security import OAuth2PasswordRequestFormStrict
 from db.user import authenticate_user
-from schemas.token import TokenData, Token
+from schemas.token import Token
 from db.session import get_db
-from schemas.user import UserInDB
 from pymongo.asynchronous.database import AsyncDatabase
 
 router = APIRouter()

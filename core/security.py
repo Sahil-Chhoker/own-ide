@@ -1,5 +1,5 @@
 from datetime import datetime
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, timezone
 from typing import Optional
 
 from core.config import settings
