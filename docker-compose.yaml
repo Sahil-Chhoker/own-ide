@@ -1,0 +1,29 @@
+services:
+  # The Docker Engine (Sandbox)
+  dind:
+    image: docker:dind
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    networks:
+      - code-net
+
+  # Your FastAPI App
+  web:
+    build: .
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    ports:
+      - "8000:8000"
+    environment:
+      - DOCKER_HOST=tcp://dind:2375
+      - DATABASE_URI=${DATABASE_URI}
+      - REDIS_URL=${REDIS_URL}
+    depends_on:
+      - dind
+    networks:
+      - code-net
+
+networks:
+  code-net:

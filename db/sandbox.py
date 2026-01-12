@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import os
 import time
 from uuid import uuid4
 import docker
@@ -9,7 +10,33 @@ from schemas.code import CodeRequest, CodeResult
 from core.config import settings
 from pymongo.asynchronous.database import AsyncDatabase
 
-client = docker.from_env()
+
+_docker_client = None
+
+def get_docker_client():
+    global _docker_client
+    if _docker_client:
+        return _docker_client
+
+    base_url = os.getenv("DOCKER_HOST", "tcp://dind:2375")
+
+    max_retries = 15 
+    for i in range(max_retries):
+        try:
+            print(f"Attempting to connect to Docker (Attempt {i+1}/{max_retries})...")
+            client = docker.DockerClient(base_url=base_url, timeout=10)
+            client.ping()
+            print("Successfully connected to Docker daemon.")
+            _docker_client = client
+            return _docker_client
+        except (docker.errors.DockerException, Exception) as e:
+            if i == max_retries - 1:
+                print("Could not connect to Docker daemon after 15 attempts.")
+                raise e
+            # Wait longer as attempts increase (2s, 4s, 6s...)
+            time.sleep(min(i * 2, 10) + 2) 
+
+    return None
 
 
 def _get_exec_command(language: str, code: str) -> list[str]:
@@ -72,7 +99,7 @@ def execute_code(request: CodeRequest) -> CodeResult:
 
     container = None
     try:
-        container = client.containers.run(
+        container = get_docker_client().containers.run(
             image=image, command=["sleep", "infinity"], detach=True, auto_remove=True
         )
 
@@ -125,7 +152,7 @@ async def create_initial_submission(
     if is_guest:
         expiration_time = now + timedelta(seconds=600)
     else:
-        expiration_time = now + settings.SUBMISSION_TTL
+        expiration_time = now + timedelta(seconds=settings.SUBMISSION_TTL_SECONDS)
 
     submission_data = {
         "task_id": task_id,
