@@ -109,7 +109,15 @@ async def execute_code(request: CodeRequest) -> CodeResult:
             image=image, 
             command=["sleep", "infinity"], 
             detach=True, 
-            auto_remove=True
+            auto_remove=True,
+
+            # security provisions
+            mem_limit="128m",           # Hard memory limit
+            memswap_limit="128m",       # Disable swap (stops disk thrashing)
+            cpu_period=100000,
+            cpu_quota=50000,            # Effectively 0.5 CPU
+            pids_limit=20,              # Max 20 processes/threads
+            network_disabled=True,      # Total network isolation
         )
 
         exec_command = _get_exec_command(request.language, request.code)
