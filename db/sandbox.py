@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 import os
 import time
@@ -9,9 +10,11 @@ from db.user import get_optional_current_user
 from schemas.code import CodeRequest, CodeResult
 from core.config import settings
 from pymongo.asynchronous.database import AsyncDatabase
+from pymongo.write_concern import WriteConcern
 
 
 _docker_client = None
+TIMEOUT_SECONDS = 5
 
 def get_docker_client():
     global _docker_client
@@ -92,55 +95,62 @@ Sample Json for C++:
 """
 
 
-def execute_code(request: CodeRequest) -> CodeResult:
+async def execute_code(request: CodeRequest) -> CodeResult:
     image = settings.LANG_IMAGE.get(request.language)
     if not image:
         return CodeResult(stdout=None, stderr="Unsupported language", exit_code=1)
 
+    client = await asyncio.to_thread(get_docker_client)
     container = None
+    
     try:
-        container = get_docker_client().containers.run(
-            image=image, command=["sleep", "infinity"], detach=True, auto_remove=True
+        container = await asyncio.to_thread(
+            client.containers.run,
+            image=image, 
+            command=["sleep", "infinity"], 
+            detach=True, 
+            auto_remove=True
         )
 
         exec_command = _get_exec_command(request.language, request.code)
-
         start_time = time.perf_counter()
-        exec_log = container.exec_run(exec_command, demux=True)
-        end_time = time.perf_counter()
 
-        # Calculate duration and remove 50ms buffer
-        total_time = end_time - start_time
-        execution_time = max(0.0, total_time - 0.05)
+        try:
+            exec_log = await asyncio.wait_for(
+                asyncio.to_thread(container.exec_run, exec_command, demux=True),
+                timeout=TIMEOUT_SECONDS
+            )
+            
+            end_time = time.perf_counter()
+            execution_time = max(0.0, (end_time - start_time) - 0.05)
 
-        exit_code = exec_log.exit_code
-        stdout_bytes, stderr_bytes = exec_log.output
+            stdout_bytes, stderr_bytes = exec_log.output
+            stdout = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else None
+            stderr = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else None
 
-        stdout = (
-            stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else None
-        )
-        stderr = (
-            stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else None
-        )
+            return CodeResult(
+                stdout=stdout,
+                stderr=stderr,
+                exit_code=exec_log.exit_code,
+                execution_time=round(execution_time, 4),
+                error_type="compile" if not stdout and stderr and exec_log.exit_code != 0 else ("runtime" if exec_log.exit_code != 0 else None),
+            )
 
-        error_type = None
-        if exit_code != 0:
-            error_type = "compile" if not stdout and stderr else "runtime"
-
-        return CodeResult(
-            stdout=stdout,
-            stderr=stderr,
-            exit_code=exit_code,
-            execution_time=round(execution_time, 4),
-            error_type=error_type,
-        )
+        except asyncio.TimeoutError:
+            return CodeResult(
+                stdout=None, 
+                stderr="Execution timed out after 5 seconds", 
+                exit_code=124, # Standard Linux timeout exit code
+                execution_time=5.0,
+                error_type="timeout"
+            )
 
     except Exception as e:
         return CodeResult(stdout=None, stderr=str(e), exit_code=1, error_type="system")
 
     finally:
         if container:
-            container.stop()
+            await asyncio.to_thread(container.stop, timeout=1)
 
 
 async def create_initial_submission(
@@ -164,7 +174,9 @@ async def create_initial_submission(
         "created_at": now,
         "expireAt": expiration_time,
     }
-    await db.submissions.insert_one(submission_data)
+    await db.submissions.with_options(
+        write_concern=WriteConcern(w=1)
+    ).insert_one(submission_data)
 
 
 async def update_submission_result(
