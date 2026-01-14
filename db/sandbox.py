@@ -42,23 +42,49 @@ def get_docker_client():
     return None
 
 
-def _get_exec_command(language: str, code: str) -> list[str]:
-    if language == "java":
-        return [
-            "sh",
-            "-c",
-            f'echo "{code}" > Main.java && javac Main.java && java Main',
-        ]
+def _get_exec_command(language: str, code: str, input_data: str | None):
+    """
+    Generate the shell command and environment variables to execute code in a given language.
+    Args:
+        language (str): Programming language (e.g., 'python', 'javascript', 'java', 'cpp').
+        code (str): The source code to execute.
+        input_data (str | None): Optional input data for the program. Default name for input file is 'user_file.txt'.
+    Returns:
+        Tuple[list[str], dict[str, str]]: Command list and environment variables.
+    """
+    shell = []
+
+    if input_data is not None:
+        shell.append('printf "%s" "$INPUT_DATA" > user_file.txt')
+
+    if language == "python":
+        shell.append('printf "%s" "$CODE" > main.py')
+        shell.append("python3 main.py")
+
+    elif language == "javascript":
+        shell.append('printf "%s" "$CODE" > main.js')
+        shell.append("node main.js")
+
+    elif language == "java":
+        shell.append('printf "%s" "$CODE" > Main.java')
+        shell.append("javac Main.java")
+        shell.append("java Main")
+
     elif language == "cpp":
-        return [
-            "sh",
-            "-c",
-            f'echo "{code}" > main.cpp && g++ main.cpp -o main && ./main',
-        ]
-    elif language in settings.EXEC_CMD:
-        return settings.EXEC_CMD[language] + [code]
+        shell.append('printf "%s" "$CODE" > main.cpp')
+        shell.append("g++ main.cpp -o main")
+        shell.append("./main")
+
     else:
         raise ValueError("Unsupported language")
+
+    cmd = ["sh", "-c", " && ".join(shell)]
+    env = {
+        "CODE": code,
+        "INPUT_DATA": input_data or "",
+    }
+
+    return cmd, env
 
 
 """
@@ -92,6 +118,40 @@ Sample Json for C++:
     "code": "#include <iostream>\n\nint main() {\n    std::cout << \\\"Hello, World!\\\" << std::endl;\n    return 0;\n}",
     "input_data": null
 }
+
+
+FILE:
+Python Example with input_data:
+{
+  "language": "python",
+  "code": "with open('user_file.txt', 'r', encoding='utf-8') as f:\n    print(f.read())",
+  "input_data": "This text is stored inside user_file.txt and will be printed entirely."
+}
+
+
+Java Example with input_data:
+{
+  "language": "java",
+  "code": "import java.nio.file.*; public class Main { public static void main(String[] args) throws Exception { String content = Files.readString(Path.of(\"user_file.txt\")); System.out.println(\"FILE CONTENT:\"); System.out.println(content); } }",
+  "input_data": "Hello from input_data!\nThis text should be written to user_file.txt\nand printed by Java."
+}
+
+
+Javascript Example with input_data:
+{
+  "language": "javascript",
+  "code": "const fs = require('fs');\n\nconsole.log('FILE CONTENT:');\nconst content = fs.readFileSync('user_file.txt', 'utf8');\nconsole.log(content);",
+  "input_data": "Hello from input_data!\nThis text should be written to user_file.txt\nand printed by JavaScript."
+}
+
+
+CPP Example with input_data:
+{
+  "language": "cpp",
+  "code": "#include <iostream>\n#include <fstream>\n#include <string>\n\nint main() {\n    std::ifstream file(\"user_file.txt\");\n    if (!file.is_open()) {\n        std::cerr << \"Failed to open user_file.txt\" << std::endl;\n        return 1;\n    }\n\n    std::cout << \"FILE CONTENT:\" << std::endl;\n    std::string line;\n    while (std::getline(file, line)) {\n        std::cout << line << std::endl;\n    }\n\n    file.close();\n    return 0;\n}",
+  "input_data": "Hello from input_data!\nThis text should be written to user_file.txt\nand printed by C++."
+}
+
 """
 
 
@@ -120,12 +180,12 @@ async def execute_code(request: CodeRequest) -> CodeResult:
             network_disabled=True,      # Total network isolation
         )
 
-        exec_command = _get_exec_command(request.language, request.code)
+        cmd, env = _get_exec_command(request.language, request.code, request.input_data)
         start_time = time.perf_counter()
 
         try:
             exec_log = await asyncio.wait_for(
-                asyncio.to_thread(container.exec_run, exec_command, demux=True),
+                asyncio.to_thread(container.exec_run, cmd=cmd, environment=env, demux=True),
                 timeout=TIMEOUT_SECONDS
             )
             

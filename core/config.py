@@ -32,11 +32,6 @@ class Settings:
         "cpp": "gcc:13.4.0-bookworm",
     }
 
-    # command templates for executing code in different languages
-    EXEC_CMD = {
-        "python": ["python3", "-c"],
-        "javascript": ["node", "-e"],
-    }
 
 
 settings = Settings()
