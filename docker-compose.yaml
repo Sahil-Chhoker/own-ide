@@ -7,6 +7,11 @@ services:
       - DOCKER_TLS_CERTDIR=
     networks:
       - code-net
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # FastAPI App
   web:
@@ -18,7 +23,8 @@ services:
       - "8000:8000"
     env_file: .env
     depends_on:
-      - dind
+      dind:
+        condition: service_healthy
     networks:
       - code-net
 
