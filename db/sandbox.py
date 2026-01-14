@@ -210,7 +210,7 @@ async def execute_code(request: CodeRequest) -> CodeResult:
                 stderr="Execution timed out after 5 seconds", 
                 exit_code=124, # Standard Linux timeout exit code
                 execution_time=5.0,
-                error_type="timeout"
+                error_type="runtime"
             )
 
     except Exception as e:
