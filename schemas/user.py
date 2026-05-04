@@ -1,5 +1,12 @@
 from typing import Any
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 class UserBase(BaseModel):
@@ -17,15 +24,23 @@ class UserOut(UserBase):
 
 
 class UserInDB(UserBase):
-    # using an alias to map MongoDB's _id to this id field
-    id: str = Field(alias="_id")
+    """User as stored in MongoDB. Documents use `_id`; we expose it as `id`."""
+
+    id: str
     hashed_password: str
 
-    # This allows Pydantic to accept a dictionary where the key is "_id"
-    # and map it to the attribute "id"
     model_config = ConfigDict(populate_by_name=True, arbitrary_types_allowed=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def map_mongo_id(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "_id" in data and "id" not in data:
+            return {**data, "id": data["_id"]}
+        return data
 
     @field_validator("id", mode="before")
     @classmethod
-    def convert_objectid(cls, v: Any) -> str:
-        return str(v) if v else v
+    def objectid_to_str(cls, v: Any) -> str:
+        if v is None:
+            raise ValueError("User id is required")
+        return str(v)

@@ -262,6 +262,33 @@ async def update_submission_result(
     )
 
 
+async def process_execution_job(task_id: str, code_request: CodeRequest) -> None:
+    """
+    Mark submission running, execute in Docker, persist result.
+    Used by the Celery worker (opens its own Mongo client for the task lifetime).
+    """
+    from db.db_session import close_client, get_client
+
+    client = await get_client()
+    try:
+        db = client.get_database("ideall")
+        await db.submissions.create_index("expireAt", expireAfterSeconds=0)
+
+        await db.submissions.update_one(
+            {"task_id": task_id}, {"$set": {"status": "running"}}
+        )
+
+        result = await execute_code(code_request)
+        final_status = (
+            "timeout"
+            if result.error_type == "timeout"
+            else ("completed" if result.exit_code == 0 else "failed")
+        )
+        await update_submission_result(db, task_id, final_status, result)
+    finally:
+        await close_client()
+
+
 async def get_visitor_id(
     request: Request, response: Response, user=Depends(get_optional_current_user)
 ) -> str:

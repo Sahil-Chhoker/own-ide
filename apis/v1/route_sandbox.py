@@ -1,5 +1,4 @@
-import asyncio
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from uuid import uuid4
 from db.db_session import get_db
 from db.user import get_optional_current_user
@@ -9,31 +8,16 @@ from pymongo.asynchronous.database import AsyncDatabase
 from db.sandbox import (
     check_quota,
     create_initial_submission,
-    execute_code,
     get_visitor_id,
-    update_submission_result,
 )
+from worker.tasks import run_code_execution_task
 
 router = APIRouter()
-
-
-async def run_background_task(
-    task_id: str, code_request: CodeRequest, db: AsyncDatabase
-):
-    await db.submissions.update_one(
-        {"task_id": task_id}, {"$set": {"status": "running"}}
-    )
-
-    result = await execute_code(code_request)
-
-    final_status = "timeout" if result.error_type == "timeout" else ("completed" if result.exit_code == 0 else "failed")
-    await update_submission_result(db, task_id, final_status, result)
 
 
 @router.post("/", response_model=CodeStatus)
 async def submit_code(
     code_request: CodeRequest,
-    background_tasks: BackgroundTasks,
     user=Depends(get_optional_current_user),
     visitor_id: str = Depends(get_visitor_id),
     quota=Depends(check_quota),
@@ -43,7 +27,13 @@ async def submit_code(
 
     await create_initial_submission(db, task_id, visitor_id, code_request)
 
-    background_tasks.add_task(run_background_task, task_id, code_request, db)
+    try:
+        run_code_execution_task.delay(task_id, code_request.model_dump(mode="json"))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Execution queue is unavailable. Try again later.",
+        ) from exc
 
     return CodeStatus(
         task_id=task_id, user_id=visitor_id, status="pending", result=None

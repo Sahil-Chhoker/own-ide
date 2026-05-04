@@ -24,6 +24,14 @@ class Settings:
     GUEST_QUOTA: int = int(os.getenv("GUEST_QUOTA", "1"))
     IP_EXPIRY_SECONDS: int = int(os.getenv("IP_EXPIRY_SECONDS", "86400"))
 
+    # Celery (defaults share Redis with quota; use separate URLs in prod if you prefer)
+    CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL") or os.getenv(
+        "REDIS_URL", "redis://localhost:6379/0"
+    )
+    CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND") or os.getenv(
+        "REDIS_URL", "redis://localhost:6379/0"
+    )
+
     # language to Docker image mapping
     LANG_IMAGE = {
         "python": "python:3.12-alpine",

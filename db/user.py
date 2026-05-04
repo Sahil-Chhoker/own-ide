@@ -23,11 +23,32 @@ async def create_new_user(user: UserIn, db: AsyncDatabase) -> UserOut:
             detail="User already exists with this username.",
         )
 
-    new_user = UserInDB(
-        **user.model_dump(), hashed_password=Hasher.get_password_hash(user.password)
+    hashed_password = Hasher.get_password_hash(user.password)
+    doc = {
+        "username": user.username,
+        "email": user.email,
+        "full_name": user.full_name,
+        "hashed_password": hashed_password,
+    }
+    result = await db.users.insert_one(doc)
+    if result.inserted_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not create user.",
+        )
+
+    stored = UserInDB(
+        username=user.username,
+        email=user.email,
+        full_name=user.full_name,
+        hashed_password=hashed_password,
+        id=str(result.inserted_id),
     )
-    await db.users.insert_one(new_user.model_dump())
-    return UserOut(**new_user.model_dump())
+    return UserOut(
+        username=stored.username,
+        email=stored.email,
+        full_name=stored.full_name,
+    )
 
 
 async def delete_user(username: str, db: AsyncDatabase) -> dict:
