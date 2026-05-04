@@ -8,8 +8,9 @@ class Settings:
     PROJECT_NAME: str = "Own IDE"
     PROJECT_VERSION: str = "1.0.0"
 
-    # MonogoDB settings
-    DATABASE_URI: str = os.getenv("DATABASE_URI")
+    # MongoDB settings
+    DATABASE_URI: str = os.getenv("DATABASE_URI", "mongodb://mongo:27017")
+    DATABASE_NAME: str = os.getenv("DATABASE_NAME", "ideall")
     SUBMISSION_TTL_SECONDS: int = int(os.getenv("SUBMISSION_TTL_SECONDS", "3600"))
 
     # JWT settings
@@ -20,17 +21,20 @@ class Settings:
     )
 
     # Redis quota settings
-    REDIS_URL: str = os.getenv("REDIS_URL")
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "redis")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_USERNAME: str | None = os.getenv("REDIS_USERNAME") or None
+    REDIS_PASSWORD: str | None = os.getenv("REDIS_PASSWORD") or None
     GUEST_QUOTA: int = int(os.getenv("GUEST_QUOTA", "1"))
     IP_EXPIRY_SECONDS: int = int(os.getenv("IP_EXPIRY_SECONDS", "86400"))
 
     # Celery (defaults share Redis with quota; use separate URLs in prod if you prefer)
-    CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL") or os.getenv(
-        "REDIS_URL", "redis://localhost:6379/0"
+    REDIS_URL: str = os.getenv(
+        "REDIS_URL",
+        f"redis://{REDIS_HOST}:{REDIS_PORT}/0",
     )
-    CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND") or os.getenv(
-        "REDIS_URL", "redis://localhost:6379/0"
-    )
+    CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL") or REDIS_URL
+    CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND") or REDIS_URL
 
     # language to Docker image mapping
     LANG_IMAGE = {

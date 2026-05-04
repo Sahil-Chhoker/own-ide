@@ -99,7 +99,7 @@ Sample Json for python:
 Sample Json for java:
 {
     "language": "java",
-    "code": "public class Main { public static void main(String[] args) { System.out.println(\\\"Hello, World!\\\"); System.out.println(\\\"I am learning Java.\\\"); } }",
+    "code": "public class Main { public static void main(String[] args) { System.out.println(\"Hello, World!\"); System.out.println(\"I am learning Java.\"); } }",
     "input_data": null
 }
 
@@ -267,12 +267,12 @@ async def process_execution_job(task_id: str, code_request: CodeRequest) -> None
     Mark submission running, execute in Docker, persist result.
     Used by the Celery worker (opens its own Mongo client for the task lifetime).
     """
-    from db.db_session import close_client, get_client
+    from db.db_session import close_client, ensure_indexes, get_client
 
     client = await get_client()
     try:
-        db = client.get_database("ideall")
-        await db.submissions.create_index("expireAt", expireAfterSeconds=0)
+        db = client.get_database(settings.DATABASE_NAME)
+        await ensure_indexes(db)
 
         await db.submissions.update_one(
             {"task_id": task_id}, {"$set": {"status": "running"}}
@@ -292,9 +292,9 @@ async def process_execution_job(task_id: str, code_request: CodeRequest) -> None
 async def get_visitor_id(
     request: Request, response: Response, user=Depends(get_optional_current_user)
 ) -> str:
-    # if logged in, use user ID
+    # if logged in, use stable application identity
     if user:
-        return user.id
+        return f"user_{user.username}"
 
     # if not logged in, check for an existing guest_id cookie
     guest_id = request.cookies.get("guest_id")

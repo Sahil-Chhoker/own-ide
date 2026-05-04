@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, status
-from schemas.user import UserIn, UserOut
+from schemas.user import UserIn, UserInDB, UserOut
 from db.user import create_new_user, delete_user, get_current_user
 from pymongo.asynchronous.database import AsyncDatabase
 from db.db_session import get_db
@@ -18,7 +18,7 @@ async def create_user(
 
 @router.get("/profile", response_model=UserOut)
 async def get_user_profile(
-    current_user: UserIn = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ):
     return current_user
 
@@ -26,7 +26,7 @@ async def get_user_profile(
 @router.delete("/", status_code=status.HTTP_200_OK)
 async def delete_current_user(
     db: AsyncDatabase = Depends(get_db),
-    current_user: UserIn = Depends(get_current_user),
+    current_user: UserInDB = Depends(get_current_user),
 ):
     if not current_user:
         raise HTTPException(

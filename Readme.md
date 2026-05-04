@@ -77,8 +77,6 @@ Make sure you have:
 
 * Docker installed and running
 * Python 3.10+
-* MongoDB (local or cloud)
-* Redis (local or cloud)
 
 ---
 
@@ -87,16 +85,18 @@ Make sure you have:
 Create a `.env` file in the project root:
 
 ```env
-DATABASE_URI="your_mongoDB_uri"
-DATABASE_USER="your_mongoDB_username"
-DATABASE_PASSWORD="your_mongoDB_password"
-SUMBISSION_TTL_SECONDS=86400
+DATABASE_URI="mongodb://mongo:27017"
+DATABASE_NAME="ideall"
+SUBMISSION_TTL_SECONDS=86400
 
 SECRET_KEY="your_custom_secret_key"
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 
-REDIS_URL="your_redis_url"
+REDIS_HOST="redis"
+REDIS_PORT=6379
+REDIS_USERNAME=
+REDIS_PASSWORD=
 GUEST_QUOTA=5
 IP_EXPIRY_SECONDS=86400  # 1 day in seconds
 ```
@@ -106,12 +106,12 @@ IP_EXPIRY_SECONDS=86400  # 1 day in seconds
 ### Run Locally
 
 ```bash
-pip install -r requirements.txt
-fastapi dev main.py
+docker compose up --build
 ```
 
-Server will start at:
-
-```
-http://127.0.0.1:8000
-```
+This starts:
+- FastAPI API (`web`)
+- Celery worker (`worker`)
+- Redis (`redis`) for quota cache + Celery broker/backend
+- MongoDB (`mongo`) for persistent data
+- Docker-in-Docker sandbox (`dind`) for code execution

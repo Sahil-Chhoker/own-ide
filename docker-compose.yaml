@@ -1,26 +1,55 @@
 services:
   # The Docker Engine (Sandbox)
   dind:
-    image: docker:dind
+    image: docker:24.0.9-dind
     privileged: true
+    command: ["--storage-driver=vfs"]
     environment:
       - DOCKER_TLS_CERTDIR=
+      - DOCKER_BUILDKIT=0
+      - DOCKER_DRIVER=vfs
     networks:
       - code-net
     healthcheck:
       test: ["CMD", "docker", "info"]
-      interval: 10s
+      interval: 60s
       timeout: 5s
-      retries: 5
+      retries: 3
+      start_period: 20s
 
   redis:
     image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - code-net
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
     networks:
       - code-net
 
   # FastAPI App
   web:
     build: .
+    working_dir: /app
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -28,7 +57,11 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
-      # Override .env so web + worker use the compose `redis` service by default
+      PYTHONPATH: /app
+      DATABASE_URI: mongodb://mongo:27017
+      DATABASE_NAME: ideall
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -36,13 +69,16 @@ services:
       dind:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
     networks:
       - code-net
 
   # Celery worker: caps concurrent Docker runs via --concurrency (tune as needed)
   worker:
     build: .
+    working_dir: /app
     command:
       [
         "celery",
@@ -56,7 +92,12 @@ services:
       ]
     env_file: .env
     environment:
+      PYTHONPATH: /app
+      DATABASE_URI: mongodb://mongo:27017
+      DATABASE_NAME: ideall
       DOCKER_HOST: tcp://dind:2375
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
@@ -64,9 +105,15 @@ services:
       dind:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
     networks:
       - code-net
 
 networks:
   code-net:
+
+volumes:
+  mongo-data:
+  redis-data:
