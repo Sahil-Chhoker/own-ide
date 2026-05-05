@@ -27,10 +27,13 @@ def get_docker_client():
     for i in range(max_retries):
         try:
             print(f"Attempting to connect to Docker (Attempt {i+1}/{max_retries})...")
-            client = docker.DockerClient(base_url=base_url, timeout=10)
+            # Use a short timeout just for checking if daemon is up
+            client = docker.DockerClient(base_url=base_url, timeout=5)
             client.ping()
             print("Successfully connected to Docker daemon.")
-            _docker_client = client
+            
+            # Recreate client with a long timeout for actual operations (e.g., pulling images)
+            _docker_client = docker.DockerClient(base_url=base_url, timeout=300)
             return _docker_client
         except (docker.errors.DockerException, Exception) as e:
             if i == max_retries - 1:
@@ -210,7 +213,7 @@ async def execute_code(request: CodeRequest) -> CodeResult:
                 stderr="Execution timed out after 5 seconds", 
                 exit_code=124, # Standard Linux timeout exit code
                 execution_time=TIMEOUT_SECONDS,
-                error_type="runtime"
+                error_type="timeout"
             )
 
     except Exception as e:
@@ -262,7 +265,7 @@ async def update_submission_result(
     )
 
 
-async def process_execution_job(task_id: str, code_request: CodeRequest) -> None:
+async def process_execution_job(task_id: str, code_request: CodeRequest) -> dict:
     """
     Mark submission running, execute in Docker, persist result.
     Used by the Celery worker (opens its own Mongo client for the task lifetime).
@@ -281,10 +284,12 @@ async def process_execution_job(task_id: str, code_request: CodeRequest) -> None
         result = await execute_code(code_request)
         final_status = (
             "timeout"
-            if result.error_type == "timeout"
+            if result.error_type == "timeout" or result.exit_code == 124
             else ("completed" if result.exit_code == 0 else "failed")
         )
         await update_submission_result(db, task_id, final_status, result)
+        
+        return {"status": final_status, "result": result.model_dump()}
     finally:
         await close_client()
 

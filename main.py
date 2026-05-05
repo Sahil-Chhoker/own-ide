@@ -25,4 +25,4 @@ app = start_application()
 
 @app.get("/", tags=["home"])
 def home():
-    return {"message": "Welcome to the Own IDE API!"}
+    return {"message": "Welcome to the Own IDE API! Go to /docs to test this API."}
