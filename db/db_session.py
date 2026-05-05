@@ -22,7 +22,7 @@ async def get_client() -> AsyncMongoClient:
         else:
             _client = AsyncMongoClient(uri)
 
-        # Verify once
+        # Optional: verify once
         await _client.admin.command({"ping": 1})
 
     return _client

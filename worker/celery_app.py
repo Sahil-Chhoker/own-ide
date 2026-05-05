@@ -15,9 +15,7 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
-    # Emit STARTED so /status can show running state in real time.
-    task_track_started=True,
-    # Fetch one task per worker slot to keep Docker concurrency bounded.
+    # Long-running jobs: fetch one task per worker slot so concurrency caps Docker runs
     worker_prefetch_multiplier=1,
     task_acks_late=True,
     task_reject_on_worker_lost=True,

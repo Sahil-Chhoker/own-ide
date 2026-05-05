@@ -11,7 +11,7 @@ class CodeRequest(BaseModel):
 class CodeResult(BaseModel):
     stdout: str | None = None
     stderr: str | None = None
-    error_type: Literal["runtime", "compile", "system", "timeout"] | None = None
+    error_type: Literal["runtime", "compile", "system"] | None = None
     exit_code: int | None = None
     execution_time: float | None = None
 
@@ -19,12 +19,5 @@ class CodeResult(BaseModel):
 class CodeStatus(BaseModel):
     task_id: str
     user_id: str
-    status: Literal[
-        "pending",
-        "running",
-        "completed",
-        "failed",
-        "retrying",
-        "timeout",
-    ]
+    status: Literal["pending", "running", "completed", "failed"]
     result: CodeResult | None = None
