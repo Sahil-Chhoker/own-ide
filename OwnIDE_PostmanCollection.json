@@ -98,6 +98,11 @@
                                     "key": "password",
                                     "value": "password123",
                                     "type": "text"
+                                },
+                                {
+                                    "key": "grant_type",
+                                    "value": "password",
+                                    "type": "text"
                                 }
                             ]
                         }
