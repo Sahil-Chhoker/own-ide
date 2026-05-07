@@ -1,7 +1,9 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+import logging
 import os
 import time
+import traceback
 from uuid import uuid4
 import docker
 from fastapi import Depends, HTTPException, Request, Response, status
@@ -15,6 +17,7 @@ from pymongo.write_concern import WriteConcern
 
 _docker_client = None
 TIMEOUT_SECONDS = 5
+logger = logging.getLogger(__name__)
 
 def get_docker_client():
     global _docker_client
@@ -278,18 +281,30 @@ async def process_execution_job(task_id: str, code_request: CodeRequest) -> dict
         await ensure_indexes(db)
 
         await db.submissions.update_one(
-            {"task_id": task_id}, {"$set": {"status": "running"}}
+            {"task_id": task_id},
+            {"$set": {"status": "running", "updated_at": datetime.now(timezone.utc)}},
         )
 
-        result = await execute_code(code_request)
-        final_status = (
-            "timeout"
-            if result.error_type == "timeout" or result.exit_code == 124
-            else ("completed" if result.exit_code == 0 else "failed")
-        )
-        await update_submission_result(db, task_id, final_status, result)
-        
-        return {"status": final_status, "result": result.model_dump()}
+        try:
+            result = await execute_code(code_request)
+            final_status = (
+                "timeout"
+                if result.error_type == "timeout" or result.exit_code == 124
+                else ("completed" if result.exit_code == 0 else "failed")
+            )
+            await update_submission_result(db, task_id, final_status, result)
+            return {"status": final_status, "result": result.model_dump()}
+        except Exception:
+            # Ensure even unexpected worker crashes persist a failure result in MongoDB.
+            tb = traceback.format_exc(limit=20)
+            result = CodeResult(
+                stdout=None,
+                stderr=f"Internal Worker Error:\n{tb}",
+                exit_code=1,
+                error_type="system",
+            )
+            await update_submission_result(db, task_id, "failed", result)
+            return {"status": "failed", "result": result.model_dump()}
     finally:
         await close_client()
 

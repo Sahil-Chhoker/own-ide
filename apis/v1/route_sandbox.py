@@ -3,7 +3,7 @@ from uuid import uuid4
 from celery.result import AsyncResult
 from db.db_session import get_db
 from db.user import get_optional_current_user
-from schemas.code import CodeRequest, CodeStatus
+from schemas.code import CodeRequest, CodeResult, CodeStatus
 from pymongo.asynchronous.database import AsyncDatabase
 
 from db.sandbox import (
@@ -68,25 +68,47 @@ async def get_status(task_id: str, db: AsyncDatabase = Depends(get_db)) -> CodeS
     async_result = AsyncResult(task_id, app=celery_app)
     normalized_status = _map_celery_state(async_result.state)
 
-    if async_result.successful():
-        res_data = async_result.result or {}
+    # Prefer MongoDB as source of truth
+    if submission.get("result") is not None:
         return CodeStatus(
             task_id=task_id,
             user_id=submission["user_id"],
-            status=res_data.get("status", submission.get("status", "completed")),
-            result=res_data.get("result", submission.get("result")),
+            status=submission.get("status", normalized_status),
+            result=submission.get("result"),
+        )
+
+    if async_result.successful():
+        res_data = async_result.result or {}
+        # Celery backend might have the result before Mongo is updated; return it and backfill Mongo.
+        celery_status = res_data.get("status") or submission.get("status") or "completed"
+        celery_result = res_data.get("result")
+        if celery_result is not None:
+            await db.submissions.update_one(
+                {"task_id": task_id},
+                {"$set": {"status": celery_status, "result": celery_result}},
+            )
+        return CodeStatus(
+            task_id=task_id,
+            user_id=submission["user_id"],
+            status=celery_status,
+            result=celery_result,
         )
 
     if async_result.failed():
-        result = submission.get("result")
-
-        # Fallback if MongoDB didn't capture the worker crash
-        if result is None and async_result.traceback:
-            result = {
-                "stdout": None,
-                "stderr": f"Internal Worker Error:\n{async_result.traceback}",
-                "error_type": "system",
-            }
+        # Fallback if MongoDB didn't capture the worker crash: create and persist a system error.
+        result = None
+        if async_result.traceback:
+            result = CodeResult(
+                stdout=None,
+                stderr=f"Internal Worker Error:\n{async_result.traceback}",
+                error_type="system",
+                exit_code=1,
+                execution_time=None,
+            ).model_dump()
+            await db.submissions.update_one(
+                {"task_id": task_id},
+                {"$set": {"status": "failed", "result": result}},
+            )
 
         return CodeStatus(
             task_id=task_id,
@@ -98,6 +120,6 @@ async def get_status(task_id: str, db: AsyncDatabase = Depends(get_db)) -> CodeS
     return CodeStatus(
         task_id=task_id,
         user_id=submission["user_id"],
-        status=normalized_status,
+        status=submission.get("status", normalized_status),
         result=None,
     )
