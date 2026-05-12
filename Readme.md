@@ -2,8 +2,6 @@
 
 A fast, secure, containerized code execution engine built with **FastAPI**, **Docker**, **Celery**, and **Redis**.
 
-![OwnIDE Architecture Diagram](./OwnIDE.drawio.png)
-
 Own-IDE lets users run code in multiple languages (Python, C++, Java, JavaScript) inside isolated Docker containers. Every execution is sandboxed, resource-limited, and tracked - making it safe enough to expose as an API and fast enough for real usage.
 
 Think of it as the backend engine for an online IDE or judge system.
@@ -71,6 +69,20 @@ Building a secure code execution engine requires navigating several critical tra
 ### 6. Capping Worker Concurrency
 * **Choice:** Running Celery with `--concurrency 4`.
 * **Trade-off:** By default, Celery spins up a worker thread for every CPU core. Since Docker execution is highly memory/CPU intensive, uncapped concurrency could lead to the server instantly crashing from OOM (Out of Memory) errors during a traffic spike. Hard-capping concurrency limits maximum throughput but guarantees server stability by creating a safe queue backlog instead of a crash.
+---
+
+## Lifecycle of a Code Execution (Data Flow)
+
+![OwnIDE Architecture Diagram](./OwnIDE.png)
+
+1. **The Request (FastAPI):** A JSON payload containing `language`, `code`, and `input_data` hits the `POST /sandbox/` endpoint.
+2. **Quota Check (Redis):** The API checks if the user is authenticated via JWT. If they are a guest, a Redis Pipeline atomically checks and increments their daily quota based on a tracking cookie to prevent abuse.
+3. **Database Initialization (MongoDB):** A new document is created in MongoDB with a `pending` status. This guarantees that even if the execution queue is backed up, the user still has a permanent record of their submission.
+4. **Queueing (Celery + Redis):** The API avoids blocking its event loop by pushing the `task_id` and payload to the Celery Broker (Redis). It immediately returns the `task_id` to the client.
+5. **Execution (Worker + DinD):** A background Celery worker picks up the task from Redis. It connects to the Docker Daemon and spins up a highly restricted, ephemeral container (no network access, strict memory limits). The code is injected, compiled (if necessary), and executed.
+6. **Result Persistence (Worker -> MongoDB):** Once Docker finishes and returns the raw `stdout`/`stderr` streams, the Celery worker formats the output and updates the original MongoDB document with the final status and logs.
+7. **Client Polling (FastAPI):** Throughout this process, the user's browser is polling `GET /status/{task_id}`. Once the MongoDB document is updated by the worker, the API fetches it and returns the final code output to the UI.
+
 ---
 
 ## Project Structure
