@@ -73,7 +73,7 @@ Building a secure code execution engine requires navigating several critical tra
 
 ## Lifecycle of a Code Execution (Data Flow)
 
-![OwnIDE Architecture Diagram](./OwnIDE.png)
+![OwnIDE Architecture Diagram](./OwnIDE2.png)
 
 1. **The Request (FastAPI):** A JSON payload containing `language`, `code`, and `input_data` hits the `POST /sandbox/` endpoint.
 2. **Quota Check (Redis):** The API checks if the user is authenticated via JWT. If they are a guest, a Redis Pipeline atomically checks and increments their daily quota based on a tracking cookie to prevent abuse.
