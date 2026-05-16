@@ -8,10 +8,14 @@ async def get_redis_client() -> redis.Redis:
     global _redis_client
 
     if _redis_client is None:
-        _redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
-        # Verify connection
+        _redis_client = redis.Redis(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            username=settings.REDIS_USERNAME,
+            password=settings.REDIS_PASSWORD,
+            decode_responses=True,
+        )
         await _redis_client.ping()
-        print("Connected to Redis!")
 
     return _redis_client
 

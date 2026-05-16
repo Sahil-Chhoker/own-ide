@@ -1,7 +1,9 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+import logging
 import os
 import time
+import traceback
 from uuid import uuid4
 import docker
 from fastapi import Depends, HTTPException, Request, Response, status
@@ -15,6 +17,7 @@ from pymongo.write_concern import WriteConcern
 
 _docker_client = None
 TIMEOUT_SECONDS = 5
+logger = logging.getLogger(__name__)
 
 def get_docker_client():
     global _docker_client
@@ -27,10 +30,13 @@ def get_docker_client():
     for i in range(max_retries):
         try:
             print(f"Attempting to connect to Docker (Attempt {i+1}/{max_retries})...")
-            client = docker.DockerClient(base_url=base_url, timeout=10)
+            # Use a short timeout just for checking if daemon is up
+            client = docker.DockerClient(base_url=base_url, timeout=5)
             client.ping()
             print("Successfully connected to Docker daemon.")
-            _docker_client = client
+            
+            # Recreate client with a long timeout for actual operations (e.g., pulling images)
+            _docker_client = docker.DockerClient(base_url=base_url, timeout=300)
             return _docker_client
         except (docker.errors.DockerException, Exception) as e:
             if i == max_retries - 1:
@@ -99,7 +105,7 @@ Sample Json for python:
 Sample Json for java:
 {
     "language": "java",
-    "code": "public class Main { public static void main(String[] args) { System.out.println(\\\"Hello, World!\\\"); System.out.println(\\\"I am learning Java.\\\"); } }",
+    "code": "public class Main { public static void main(String[] args) { System.out.println(\"Hello, World!\"); System.out.println(\"I am learning Java.\"); } }",
     "input_data": null
 }
 
@@ -210,7 +216,7 @@ async def execute_code(request: CodeRequest) -> CodeResult:
                 stderr="Execution timed out after 5 seconds", 
                 exit_code=124, # Standard Linux timeout exit code
                 execution_time=TIMEOUT_SECONDS,
-                error_type="runtime"
+                error_type="timeout"
             )
 
     except Exception as e:
@@ -262,12 +268,53 @@ async def update_submission_result(
     )
 
 
+async def process_execution_job(task_id: str, code_request: CodeRequest) -> dict:
+    """
+    Mark submission running, execute in Docker, persist result.
+    Used by the Celery worker (opens its own Mongo client for the task lifetime).
+    """
+    from db.db_session import close_client, ensure_indexes, get_client
+
+    client = await get_client()
+    try:
+        db = client.get_database(settings.DATABASE_NAME)
+        await ensure_indexes(db)
+
+        await db.submissions.update_one(
+            {"task_id": task_id},
+            {"$set": {"status": "running", "updated_at": datetime.now(timezone.utc)}},
+        )
+
+        try:
+            result = await execute_code(code_request)
+            final_status = (
+                "timeout"
+                if result.error_type == "timeout" or result.exit_code == 124
+                else ("completed" if result.exit_code == 0 else "failed")
+            )
+            await update_submission_result(db, task_id, final_status, result)
+            return {"status": final_status, "result": result.model_dump()}
+        except Exception:
+            # Ensure even unexpected worker crashes persist a failure result in MongoDB.
+            tb = traceback.format_exc(limit=20)
+            result = CodeResult(
+                stdout=None,
+                stderr=f"Internal Worker Error:\n{tb}",
+                exit_code=1,
+                error_type="system",
+            )
+            await update_submission_result(db, task_id, "failed", result)
+            return {"status": "failed", "result": result.model_dump()}
+    finally:
+        await close_client()
+
+
 async def get_visitor_id(
     request: Request, response: Response, user=Depends(get_optional_current_user)
 ) -> str:
-    # if logged in, use user ID
+    # if logged in, use stable application identity
     if user:
-        return user.id
+        return f"user_{user.username}"
 
     # if not logged in, check for an existing guest_id cookie
     guest_id = request.cookies.get("guest_id")

@@ -23,11 +23,16 @@ async def create_new_user(user: UserIn, db: AsyncDatabase) -> UserOut:
             detail="User already exists with this username.",
         )
 
-    new_user = UserInDB(
-        **user.model_dump(), hashed_password=Hasher.get_password_hash(user.password)
+    hashed_password = Hasher.get_password_hash(user.password)
+    await db.users.insert_one(
+        {
+            "username": user.username,
+            "email": user.email,
+            "full_name": user.full_name,
+            "hashed_password": hashed_password,
+        }
     )
-    await db.users.insert_one(new_user.model_dump())
-    return UserOut(**new_user.model_dump())
+    return UserOut(username=user.username, email=user.email, full_name=user.full_name)
 
 
 async def delete_user(username: str, db: AsyncDatabase) -> dict:
@@ -40,7 +45,7 @@ async def delete_user(username: str, db: AsyncDatabase) -> dict:
     return {"message": f"User {username} deleted successfully"}
 
 
-async def get_user(username: str):
+async def get_user(username: str) -> UserInDB | None:
     """
     Retrieve a user by username.
     """
@@ -48,7 +53,7 @@ async def get_user(username: str):
     query = await db.users.find_one({"username": username})
     if query:
         return UserInDB(**query)
-    return False
+    return None
 
 
 async def authenticate_user(username: str, password: str):
@@ -90,10 +95,10 @@ async def get_current_user(
         token_data = TokenData(username=username)
     except jwt.InvalidTokenError:
         raise credentials_exception
-    user = await get_user(username=token_data.username)  # type: ignore
-    if user is None:
+    user = await get_user(username=token_data.username)  # type: ignore[arg-type]
+    if not user:
         raise credentials_exception
-    return user  # type: ignore
+    return user
 
 
 optional_oauth2_scheme = OAuth2PasswordBearer(
