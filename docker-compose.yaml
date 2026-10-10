@@ -7,9 +7,6 @@ services:
     environment:
       - DOCKER_TLS_CERTDIR=
       - DOCKER_BUILDKIT=0
-      - DOCKER_DRIVER=vfs
-    networks:
-      - code-net
     healthcheck:
       test: ["CMD", "docker", "info"]
       interval: 60s
@@ -29,8 +26,6 @@ services:
       retries: 3
       start_period: 20s
     restart: unless-stopped
-    networks:
-      - code-net
 
   mongo:
     image: mongo:7
@@ -43,13 +38,10 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
-    networks:
-      - code-net
 
   # FastAPI App
   web:
     build: .
-    working_dir: /app
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -73,13 +65,10 @@ services:
         condition: service_healthy
       mongo:
         condition: service_healthy
-    networks:
-      - code-net
 
   # Celery worker: caps concurrent Docker runs via --concurrency (tune as needed)
   worker:
     build: .
-    working_dir: /app
     command:
       [
         "celery",
@@ -109,11 +98,6 @@ services:
         condition: service_healthy
       mongo:
         condition: service_healthy
-    networks:
-      - code-net
-
-networks:
-  code-net:
 
 volumes:
   mongo-data:
