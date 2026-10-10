@@ -243,6 +243,7 @@ async def create_initial_submission(
         "user_id": user_id,
         "language": code_request.language,
         "code": code_request.code,
+        "input_data": code_request.input_data,
         "status": "pending",
         "result": None,
         "created_at": now,

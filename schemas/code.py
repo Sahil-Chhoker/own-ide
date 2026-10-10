@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import datetime
 from typing import Literal
 
 
@@ -28,3 +29,10 @@ class CodeStatus(BaseModel):
         "timeout",
     ]
     result: CodeResult | None = None
+
+
+class CodeHistory(CodeStatus):
+    language: Literal["python", "javascript", "java", "cpp"]
+    code: str
+    input_data: str | None = None
+    created_at: datetime

@@ -55,6 +55,7 @@ async def ensure_indexes(db: AsyncDatabase) -> None:
 
         # TTL cleanup for submissions and unique constraints for users.
         await db.submissions.create_index("expireAt", expireAfterSeconds=0)
+        await db.submissions.create_index([("user_id", 1), ("created_at", -1)])
         await db.users.create_index("username", unique=True)
         await db.users.create_index("email", unique=True)
         _indexes_ensured = True

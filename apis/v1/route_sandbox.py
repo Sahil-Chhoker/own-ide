@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from uuid import uuid4
 from celery.result import AsyncResult
 from db.db_session import get_db
-from db.user import get_optional_current_user
-from schemas.code import CodeRequest, CodeResult, CodeStatus
+from db.user import get_current_user, get_optional_current_user
+from schemas.code import CodeHistory, CodeRequest, CodeResult, CodeStatus
 from pymongo.asynchronous.database import AsyncDatabase
 
 from db.sandbox import (
@@ -123,3 +123,51 @@ async def get_status(task_id: str, db: AsyncDatabase = Depends(get_db)) -> CodeS
         status=submission.get("status", normalized_status),
         result=None,
     )
+
+
+@router.get("/history", response_model=list[CodeHistory])
+async def get_sandbox_history(
+    user=Depends(get_current_user),
+    db: AsyncDatabase = Depends(get_db),
+    limit: int = Query(10, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> list[CodeHistory]:
+    """Retrieve submissions, including the original code, for the current user."""
+    query_filter = {"user_id": f"user_{user.username}"}
+    submissions_cursor = (
+        db.submissions
+        .find(
+            query_filter,
+            {
+                "_id": 0,
+                "task_id": 1,
+                "user_id": 1,
+                "status": 1,
+                "result": 1,
+                "language": 1,
+                "code": 1,
+                "input_data": 1,
+                "created_at": 1,
+            },
+        )
+        .sort("created_at", -1)
+        .skip(offset)
+        .limit(limit)
+    )
+
+    submissions: list[CodeHistory] = []
+    async for submission in submissions_cursor:
+        submissions.append(
+            CodeHistory(
+                task_id=submission["task_id"],
+                user_id=submission["user_id"],
+                status=submission.get("status", "pending"),
+                result=submission.get("result"),
+                language=submission["language"],
+                code=submission["code"],
+                input_data=submission.get("input_data"),
+                created_at=submission["created_at"],
+            )
+        )
+
+    return submissions
