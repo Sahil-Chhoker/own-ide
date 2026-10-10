@@ -19,6 +19,21 @@ _docker_client = None
 TIMEOUT_SECONDS = 5
 logger = logging.getLogger(__name__)
 
+_GUEST_QUOTA_SCRIPT = """
+local current = redis.call("GET", KEYS[1])
+if current and tonumber(current) >= tonumber(ARGV[1]) then
+    return 0
+end
+
+local updated = redis.call("INCR", KEYS[1])
+if updated == 1 then
+    redis.call("EXPIRE", KEYS[1], ARGV[2])
+end
+
+return 1
+"""
+
+
 def get_docker_client():
     global _docker_client
     if _docker_client:
@@ -337,21 +352,22 @@ async def check_quota(
     redis=Depends(get_redis_client),
 ):
     """
-    Check and enforce guest user quota based on IP address.
+    Check and enforce the guest quota atomically in Redis.
     """
     # Authorized users have no quota restrictions
     if user:
         return
 
     redis_key = f"quota:{visitor_id}"
-
-    count = await redis.get(redis_key)
-    if count and int(count) >= settings.GUEST_QUOTA:
+    allowed = await redis.eval(
+        _GUEST_QUOTA_SCRIPT,
+        1,
+        redis_key,
+        settings.GUEST_QUOTA,
+        settings.IP_EXPIRY_SECONDS,
+    )
+    if not allowed:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Guest quota exceeded. Please log in for unlimited access.",
         )
-    async with redis.pipeline(transaction=True) as pipe:
-        await pipe.incr(redis_key)
-        await pipe.expire(redis_key, settings.IP_EXPIRY_SECONDS, nx=True)
-        await pipe.execute()

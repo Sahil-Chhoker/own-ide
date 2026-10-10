@@ -58,9 +58,9 @@ Building a secure code execution engine requires navigating several critical tra
 * **Choice:** Clients poll the `/status/{task_id}` endpoint to get execution results.
 * **Trade-off:** Polling introduces HTTP overhead and slight latency in receiving the final output. However, it keeps the API completely stateless and easy to load balance. Moving to WebSockets would provide instant results but requires implementing a Redis Pub/Sub backplane so the Celery worker can route the completion event back to the specific FastAPI node holding the user's connection.
 
-### 4. Redis Pipelines vs Individual Queries
-* **Choice:** Using Redis `pipeline(transaction=True)` for checking and incrementing guest quotas.
-* **Trade-off:** A naive approach would `GET` the current count, check it, and then `INCR` it. Under heavy concurrency, this causes a Race Condition where multiple requests read the same value before any of them increment it. Using a Redis pipeline guarantees atomicity - the `GET`, `INCR`, and `EXPIRE` commands are bundled and executed as a single uninterruptible block.
+### 4. Redis Lua Script vs Individual Queries
+* **Choice:** Using a Redis Lua script for checking and incrementing guest quotas.
+* **Trade-off:** A naive approach would `GET` the current count, check it, and then `INCR` it. Under heavy concurrency, this causes a race condition where multiple requests read the same value before any of them increment it. The quota check uses a Lua script so the `GET`, limit comparison, `INCR`, and `EXPIRE` execute atomically inside Redis. A transaction pipeline alone would queue commands atomically, but the application-side decision must also be inside the atomic operation.
 
 ### 5. MongoDB vs SQL for State
 * **Choice:** MongoDB to store execution history.
@@ -76,7 +76,7 @@ Building a secure code execution engine requires navigating several critical tra
 ![OwnIDE Architecture Diagram](./OwnIDE2.png)
 
 1. **The Request (FastAPI):** A JSON payload containing `language`, `code`, and `input_data` hits the `POST /sandbox/` endpoint.
-2. **Quota Check (Redis):** The API checks if the user is authenticated via JWT. If they are a guest, a Redis Pipeline atomically checks and increments their daily quota based on a tracking cookie to prevent abuse.
+2. **Quota Check (Redis):** The API checks if the user is authenticated via JWT. If they are a guest, a Redis Lua script atomically checks and increments their quota based on a tracking cookie to prevent concurrent requests from exceeding the limit.
 3. **Database Initialization (MongoDB):** A new document is created in MongoDB with a `pending` status. This guarantees that even if the execution queue is backed up, the user still has a permanent record of their submission.
 4. **Queueing (Celery + Redis):** The API avoids blocking its event loop by pushing the `task_id` and payload to the Celery Broker (Redis). It immediately returns the `task_id` to the client.
 5. **Execution (Worker + DinD):** A background Celery worker picks up the task from Redis. It connects to the Docker Daemon and spins up a highly restricted, ephemeral container (no network access, strict memory limits). The code is injected, compiled (if necessary), and executed.
