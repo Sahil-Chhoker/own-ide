@@ -16,11 +16,11 @@ async def create_new_user(user: UserIn, db: AsyncDatabase) -> UserOut:
     Create a new user in the database.
     Raises HTTPException if a user with the same username already exists.
     """
-    query = await db.users.find_one({"username": user.username})
+    query = await db.users.find_one({"username": user.username}) or await db.users.find_one({"email": user.email})
     if query:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User already exists with this username.",
+            detail="User already exists with this username or email.",
         )
 
     hashed_password = Hasher.get_password_hash(user.password)
