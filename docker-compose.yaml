@@ -60,6 +60,7 @@ services:
       PYTHONPATH: /app
       DATABASE_URI: mongodb://mongo:27017
       DATABASE_NAME: ideall
+      DOCKER_HOST: tcp://dind:2375
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_URL: redis://redis:6379/0
