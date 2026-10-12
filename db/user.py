@@ -45,11 +45,10 @@ async def delete_user(username: str, db: AsyncDatabase) -> dict:
     return {"message": f"User {username} deleted successfully"}
 
 
-async def get_user(username: str) -> UserInDB | None:
+async def get_user(username: str, db: AsyncDatabase) -> UserInDB | None:
     """
     Retrieve a user by username.
     """
-    db = await get_db()
     query = await db.users.find_one({"username": username})
     if query:
         return UserInDB(**query)
@@ -60,7 +59,8 @@ async def authenticate_user(username: str, password: str):
     """
     Authenticate user by username and password.
     """
-    user = await get_user(username)
+    db = await get_db()
+    user = await get_user(username, db)
     if not user:
         return False
     if not Hasher.verify_password(password, user.hashed_password):
@@ -95,7 +95,8 @@ async def get_current_user(
         token_data = TokenData(username=username)
     except jwt.InvalidTokenError:
         raise credentials_exception
-    user = await get_user(username=token_data.username)  # type: ignore[arg-type]
+
+    user = await get_user(username=token_data.username, db=db)  # type: ignore[arg-type]
     if not user:
         raise credentials_exception
     return user
@@ -113,12 +114,9 @@ async def get_optional_current_user(
     """
     Retrieve the current user if a valid token is provided; otherwise, return None.
     Lienent version of get_current_user specifically for optional authentication.
+    Invalid tokens will raise an exception.
     """
-    if not token:
+    if token is None:
         return None
 
-    try:
-        return await get_current_user(token=token, db=db)
-    except HTTPException:
-        # If token is invalid/expired, treat them as a guest instead of blocking
-        return None
+    return await get_current_user(token=token, db=db)
